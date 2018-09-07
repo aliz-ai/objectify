@@ -102,6 +102,11 @@ public class TransactorNo<O extends Objectify> extends Transactor<O>
 
 					if (log.isLoggable(Level.FINEST))
 						log.log(Level.FINEST, "Details of optimistic concurrency failure", ex);
+					try {
+						// Do increasing backoffs with randomness
+						Thread.sleep(Math.min(10000, (long) (0.5 * Math.random() + 0.5) * 200 * (ORIGINAL_TRIES - limitTries + 2)));
+					} catch (InterruptedException ignored) {
+					}
 				} else {
 					throw ex;
 				}
