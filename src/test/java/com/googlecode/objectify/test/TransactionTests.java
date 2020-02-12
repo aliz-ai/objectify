@@ -349,32 +349,7 @@ public class TransactionTests extends TestBase
 			return commitCount;
 		}
 	}
-
-	/**
-	 * @NorbertParrag: 2020.02.12. I removed ConcurrentModificationException retry mechanism, we got to many of them in Aodocs
-	 */
-	@Test(enabled = false)
-	public void listenerIsOnlyCalledOnceIfTransactionRetries() {
-		final CommitCountListener listener = new CommitCountListener();
-		final Counter counter = new Counter();
-
-		ofy().transactNew(3, new VoidWork() {
-			@Override
-			public void vrun() {
-				counter.counter++;
-				TransactionImpl txn = ofy().getTransaction();
-				txn.listenForCommit(listener);
-
-				if (counter.counter < 3) {
-					throw new ConcurrentModificationException();
-				}
-			}
-		});
-
-		assert counter.counter == 3;
-		assert listener.getCommitCount() == 1;
-	}
-
+	
 	/**
 	 */
 	@Test
@@ -405,40 +380,6 @@ public class TransactionTests extends TestBase
 		catch (ConcurrentModificationException ex) {}
 
 		assert !listener.hasRun();
-	}
-
-	/**
-	 * @NorbertParrag: 2020.02.12. I removed ConcurrentModificationException retry mechanism, we got to many of them in Aodocs
-	 */
-	@Test(enabled = false)
-	public void listenerIsOnlyCalledOnceIfTransactionRetriesFromOrganicConcurrencyFailure() {
-		fact().register(Trivial.class);
-
-		Trivial triv = new Trivial("foo", 5);
-		final Key<Trivial> tk = ofy().save().entity(triv).now();
-		final CommitCountListener listener = new CommitCountListener();
-		final Counter counter = new Counter();
-
-		ofy().transactNew(3, new VoidWork() {
-			@Override
-			public void vrun() {
-				counter.counter++;
-				TransactionImpl txn = ofy().getTransaction();
-				txn.listenForCommit(listener);
-
-				Trivial triv1 = ofy().transactionless().load().key(tk).now();
-				Trivial triv2 = ofy().load().key(tk).now();
-
-
-				if (counter.counter < 3) {
-					ofy().transactionless().save().entity(triv1).now();
-				}
-				ofy().save().entity(triv2).now();
-			}
-		});
-
-		assert counter.counter == 3;
-		assert listener.getCommitCount() == 1;
 	}
 
 	/**

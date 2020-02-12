@@ -1,11 +1,9 @@
 package com.googlecode.objectify.impl;
 
-import com.google.common.base.Preconditions;
 import com.googlecode.objectify.Objectify;
 import com.googlecode.objectify.ObjectifyService;
 import com.googlecode.objectify.TxnType;
 import com.googlecode.objectify.Work;
-import java.util.ConcurrentModificationException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -86,22 +84,13 @@ public class TransactorNo<O extends Objectify> extends Transactor<O>
 	}
 
 	/*
-	 * It will log out and throw the ConcurrentModificationException so that the caller can manage the datastore "contention" problem on call side.
-	 * I don't want to modify the method declaration, therefore the "limitTries" is in the parameter list but it has no functionality.
+	 * It will throw the ConcurrentModificationException so that the caller can manage the datastore "contention" problem on call side.
+	 * In the method declaration, the "limitTries" has no functionality.
 	 * @see com.googlecode.objectify.impl.Transactor#transactNew(com.googlecode.objectify.impl.ObjectifyImpl, int, com.googlecode.objectify.Work)
 	 */
 	@Override
 	public <R> R transactNew(ObjectifyImpl<O> parent, int limitTries, Work<R> work) {
-		try {
-			return transactOnce(parent, work);
-		} catch (ConcurrentModificationException ex) {
-			if (log.isLoggable(Level.WARNING))
-				log.warning("Optimistic concurrency failure for " + work + " (retrying): " + ex);
-
-			if (log.isLoggable(Level.FINEST))
-				log.log(Level.FINEST, "Details of optimistic concurrency failure", ex);
-			throw ex;
-		}
+		return transactOnce(parent, work);
 	}
 
 	/**
