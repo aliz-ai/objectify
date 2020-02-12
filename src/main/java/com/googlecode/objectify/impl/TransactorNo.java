@@ -85,27 +85,22 @@ public class TransactorNo<O extends Objectify> extends Transactor<O>
 		return this.transactNew(parent, Integer.MAX_VALUE, work);
 	}
 
-	/* (non-Javadoc)
+	/*
+	 * It will log out and throw the ConcurrentModificationException so that the caller can manage the datastore "contention" problem on call side.
+	 * I don't want to modify the method declaration, therefore the "limitTries" is in the parameter list but it has no functionality.
 	 * @see com.googlecode.objectify.impl.Transactor#transactNew(com.googlecode.objectify.impl.ObjectifyImpl, int, com.googlecode.objectify.Work)
 	 */
 	@Override
 	public <R> R transactNew(ObjectifyImpl<O> parent, int limitTries, Work<R> work) {
-		Preconditions.checkArgument(limitTries >= 1);
+		try {
+			return transactOnce(parent, work);
+		} catch (ConcurrentModificationException ex) {
+			if (log.isLoggable(Level.WARNING))
+				log.warning("Optimistic concurrency failure for " + work + " (retrying): " + ex);
 
-		while (true) {
-			try {
-				return transactOnce(parent, work);
-			} catch (ConcurrentModificationException ex) {
-				if (--limitTries > 0) {
-					if (log.isLoggable(Level.WARNING))
-						log.warning("Optimistic concurrency failure for " + work + " (retrying): " + ex);
-
-					if (log.isLoggable(Level.FINEST))
-						log.log(Level.FINEST, "Details of optimistic concurrency failure", ex);
-				} else {
-					throw ex;
-				}
-			}
+			if (log.isLoggable(Level.FINEST))
+				log.log(Level.FINEST, "Details of optimistic concurrency failure", ex);
+			throw ex;
 		}
 	}
 

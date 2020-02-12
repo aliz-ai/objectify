@@ -280,7 +280,7 @@ public class TransactionTests extends TestBase
 			});
 		} catch (ConcurrentModificationException e) {}
 
-		assert counter.counter == 3;
+		assert counter.counter == 1;
 	}
 
 	public static class SimpleCommitListener implements Runnable {
@@ -351,8 +351,9 @@ public class TransactionTests extends TestBase
 	}
 
 	/**
+	 * @NorbertParrag: 2020.02.12. I removed ConcurrentModificationException retry mechanism, we got to many of them in Aodocs
 	 */
-	@Test
+	@Test(enabled = false)
 	public void listenerIsOnlyCalledOnceIfTransactionRetries() {
 		final CommitCountListener listener = new CommitCountListener();
 		final Counter counter = new Counter();
@@ -407,8 +408,9 @@ public class TransactionTests extends TestBase
 	}
 
 	/**
+	 * @NorbertParrag: 2020.02.12. I removed ConcurrentModificationException retry mechanism, we got to many of them in Aodocs
 	 */
-	@Test
+	@Test(enabled = false)
 	public void listenerIsOnlyCalledOnceIfTransactionRetriesFromOrganicConcurrencyFailure() {
 		fact().register(Trivial.class);
 
