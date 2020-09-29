@@ -100,6 +100,8 @@ public class CachingDatastoreTests extends TestBase
 	@Test
 	public void testEmptiedOnConcurrentWrite() throws Exception
 	{
+		EntityMemcache.CACHE_RACE_CONDITION_PREVENTION_ENABLED.set(() -> true);
+
 		EntityMemcache mc = Mockito.spy(new EntityMemcache(null));
 		CachingAsyncDatastoreService cds = new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc);
 
@@ -134,6 +136,7 @@ public class CachingDatastoreTests extends TestBase
 	@Test
 	public void testNotEmptiedOnConcurrentIdenticalWrite() throws Exception
 	{
+		EntityMemcache.CACHE_RACE_CONDITION_PREVENTION_ENABLED.set(() -> true);
 		EntityMemcache mc = Mockito.spy(new EntityMemcache(null));
 		CachingAsyncDatastoreService cds = new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc);
 
@@ -162,6 +165,41 @@ public class CachingDatastoreTests extends TestBase
 		
 		
 		assert !mc.getAll(putResult).values().iterator().next().isEmpty();
+		
+	}
+	
+	@Test
+	public void testEmptiedOnConcurrentIdenticalWrite_FeatureDisabled() throws Exception
+	{
+		EntityMemcache.CACHE_RACE_CONDITION_PREVENTION_ENABLED.set(() -> false);
+		EntityMemcache mc = Mockito.spy(new EntityMemcache(null));
+		CachingAsyncDatastoreService cds = new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc);
+
+		Future<List<Key>> fkey = cds.put(null, entityInList);
+		List<Key> putResult = fkey.get();
+		
+		Mockito.doAnswer(new Answer<Void>() {
+			@Override
+			public Void answer(InvocationOnMock invocation) throws Throwable {
+				// we use this 'putAll' call to simulate a memcache update done by a concurrent request
+				invocation.callRealMethod();
+				// in the 'actual' invocation then the 'putIfUntouched' will detect an update, so the 'putAll' call will empty the cache entry
+				return (Void) invocation.callRealMethod();
+			}
+		}).when(mc).putAll(Mockito.argThat(new ArgumentMatcher<Collection<Bucket>>() {
+
+			@Override
+			public boolean matches(Object argument) {
+				Collection<Bucket> buckets = (Collection<Bucket>) argument;
+				return buckets.stream().anyMatch(b -> b.getKey().equals(putResult.get(0)));
+			}
+		}));
+
+		Future<Map<Key, Entity>> fent = cds.get(null, putResult);
+		assert fent.get().values().iterator().next().getProperty("foo").equals("bar");
+		
+		
+		assert mc.getAll(putResult).values().iterator().next().isEmpty();
 		
 	}
 }

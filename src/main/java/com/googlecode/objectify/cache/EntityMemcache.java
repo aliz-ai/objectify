@@ -20,6 +20,7 @@ import com.google.appengine.api.memcache.MemcacheService;
 import com.google.appengine.api.memcache.MemcacheService.CasValues;
 import com.google.appengine.api.memcache.MemcacheService.IdentifiableValue;
 import com.google.appengine.spi.ServiceFactoryFactory;
+import com.google.common.base.Supplier;
 
 /**
  * <p>This is the facade used by Objectify to cache entities in the MemcacheService.</p>
@@ -41,6 +42,9 @@ import com.google.appengine.spi.ServiceFactoryFactory;
 @Log
 public class EntityMemcache
 {
+	
+	public static ThreadLocal<Supplier<Boolean>> CACHE_RACE_CONDITION_PREVENTION_ENABLED = ThreadLocal.withInitial(() -> () -> false);
+	
 	/**
 	 * A bucket represents memcache information for a particular Key.  It might have an entity,
 	 * it might be a negative cache result, it might be empty.
@@ -310,6 +314,9 @@ public class EntityMemcache
 			Set<Key> toEmpty = cached.entrySet().stream()
 				.filter(entry -> entry.getValue() != null) // (1)
 				.filter(entry -> {
+					if (!CACHE_RACE_CONDITION_PREVENTION_ENABLED.get().get()) {
+						return true;
+					}
 					Entity current = (Entity) bad.get(entry.getKey());
 					Object newlyRead = entry.getValue();
 					return !current.equals(newlyRead) || !(newlyRead instanceof Entity) || !current.getProperties().equals(((Entity) newlyRead).getProperties());
