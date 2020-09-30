@@ -20,6 +20,7 @@ import com.google.appengine.api.memcache.MemcacheService;
 import com.google.appengine.api.memcache.MemcacheService.CasValues;
 import com.google.appengine.api.memcache.MemcacheService.IdentifiableValue;
 import com.google.appengine.spi.ServiceFactoryFactory;
+import com.google.common.base.Objects;
 import com.google.common.base.Supplier;
 
 /**
@@ -317,9 +318,11 @@ public class EntityMemcache
 					if (!CACHE_RACE_CONDITION_PREVENTION_ENABLED.get().get()) {
 						return true;
 					}
-					Entity current = (Entity) bad.get(entry.getKey());
+					Object current = bad.get(entry.getKey());
 					Object newlyRead = entry.getValue();
-					return !current.equals(newlyRead) || !(newlyRead instanceof Entity) || !current.getProperties().equals(((Entity) newlyRead).getProperties());
+					return !Objects.equal(current, newlyRead) || !(newlyRead instanceof Entity) 
+							|| !(current instanceof Entity)
+							|| !((Entity)current).getProperties().equals(((Entity) newlyRead).getProperties());
 				}) // (2)
 				.map(entry -> entry.getKey())
 				.collect(Collectors.toSet());

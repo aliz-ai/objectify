@@ -134,6 +134,35 @@ public class CachingDatastoreTests extends TestBase
 	}
 
 	@Test
+	public void testNegativeEntryConcurrentlyBecomingPositive() throws Exception
+	{
+		EntityMemcache.CACHE_RACE_CONDITION_PREVENTION_ENABLED.set(() -> true);
+		EntityMemcache mc = Mockito.spy(new EntityMemcache(null));
+		CachingAsyncDatastoreService cds = new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc);
+		
+		Mockito.doAnswer(new Answer<Void>() {
+			@Override
+			public Void answer(InvocationOnMock invocation) throws Throwable {
+				// put a changed entity with the same key to memcache to simulate a memcache put by a concurrent request with an updated entity state
+				ServiceFactoryFactory.getFactory(IMemcacheServiceFactory.class).getMemcacheService(null).put(KeyFactory.keyToString(key), new Entity(key));
+				// in the 'actual' invocation then the 'putIfUntouched' will detect an update, so the 'putAll' call will empty the cache entry
+				return (Void) invocation.callRealMethod();
+			}
+		}).when(mc).putAll(Mockito.argThat(new ArgumentMatcher<Collection<Bucket>>() {
+
+			@Override
+			public boolean matches(Object argument) {
+				Collection<Bucket> buckets = (Collection<Bucket>) argument;
+				return buckets.stream().anyMatch(b -> b.getKey().equals(key));
+			}
+		}));
+
+		// The cache is emptied, because a colliding concurrent cache write was detected
+		Future<Map<Key, Entity>> fent = cds.get(null, keyInSet);
+		assert fent.get().values().isEmpty();
+	}
+
+	@Test
 	public void testNotEmptiedOnConcurrentIdenticalWrite() throws Exception
 	{
 		EntityMemcache.CACHE_RACE_CONDITION_PREVENTION_ENABLED.set(() -> true);
