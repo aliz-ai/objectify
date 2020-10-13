@@ -21,7 +21,6 @@ import com.google.appengine.api.memcache.MemcacheService.CasValues;
 import com.google.appengine.api.memcache.MemcacheService.IdentifiableValue;
 import com.google.appengine.spi.ServiceFactoryFactory;
 import com.google.common.base.Objects;
-import com.google.common.base.Supplier;
 
 /**
  * <p>This is the facade used by Objectify to cache entities in the MemcacheService.</p>
@@ -43,9 +42,6 @@ import com.google.common.base.Supplier;
 @Log
 public class EntityMemcache
 {
-	
-	public static ThreadLocal<Supplier<Boolean>> CACHE_RACE_CONDITION_PREVENTION_ENABLED = ThreadLocal.withInitial(() -> () -> false);
-	
 	/**
 	 * A bucket represents memcache information for a particular Key.  It might have an entity,
 	 * it might be a negative cache result, it might be empty.
@@ -315,15 +311,23 @@ public class EntityMemcache
 			Set<Key> toEmpty = cached.entrySet().stream()
 				.filter(entry -> entry.getValue() != null) // (1)
 				.filter(entry -> {
-					if (!CACHE_RACE_CONDITION_PREVENTION_ENABLED.get().get()) {
-						return true;
-					}
 					Object current = bad.get(entry.getKey());
 					Object newlyRead = entry.getValue();
-					return !Objects.equal(current, newlyRead) || !(newlyRead instanceof Entity) 
-							|| !(current instanceof Entity)
-							|| !((Entity)current).getProperties().equals(((Entity) newlyRead).getProperties());
-				}) // (2)
+					if (!Objects.equal(current, newlyRead)) {
+						// if they are not equal, there's a collision for sure
+						return true;
+					}
+					if ((newlyRead instanceof Entity) && (current instanceof Entity) && ((Entity)current).getProperties().equals(((Entity) newlyRead).getProperties())) {
+						// (2) if both are entities an their properties (including embeddedentity properties) are the same, we don't need to empty the cache
+						return false;
+					}
+					if (NEGATIVE.equals(newlyRead) && NEGATIVE.equals(current)) {
+						// (2) or if both values indicate that the entity is missing, we don't need to empty the cache
+						return false;
+					}
+					// otherwise the values are colliding, we empty the caceh
+					return true;
+				})
 				.map(entry -> entry.getKey())
 				.collect(Collectors.toSet());
 
