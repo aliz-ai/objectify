@@ -1,5 +1,13 @@
 package com.googlecode.objectify.cache;
 
+import com.google.appengine.api.datastore.Entity;
+import com.google.appengine.api.datastore.Key;
+import com.google.common.base.Objects;
+import com.googlecode.objectify.cache.MemcacheService.CasPut;
+
+import lombok.EqualsAndHashCode;
+import lombok.extern.java.Log;
+
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -7,20 +15,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
-
-import lombok.EqualsAndHashCode;
-import lombok.extern.java.Log;
-
-import com.google.appengine.api.datastore.Entity;
-import com.google.appengine.api.datastore.Key;
-import com.google.appengine.api.memcache.ErrorHandlers;
-import com.google.appengine.api.memcache.Expiration;
-import com.google.appengine.api.memcache.IMemcacheServiceFactory;
-import com.google.appengine.api.memcache.MemcacheService;
-import com.google.appengine.api.memcache.MemcacheService.CasValues;
-import com.google.appengine.api.memcache.MemcacheService.IdentifiableValue;
-import com.google.appengine.spi.ServiceFactoryFactory;
-import com.google.common.base.Objects;
 
 /**
  * <p>This is the facade used by Objectify to cache entities in the MemcacheService.</p>
@@ -58,7 +52,7 @@ public class EntityMemcache
 		 * If null, this means the key is uncacheable (possibly because the cache is down).
 		 * If not null, the IV holds the Entity or NEGATIVE or EMPTY.
 		 */
-		private IdentifiableValue iv;
+		private IdentifiableValue identifiableValue;
 
 		/**
 		 * The Entity to store in this bucket in a put().  Can be null to indicate a negative cache
@@ -80,17 +74,17 @@ public class EntityMemcache
 		public Bucket(Key key, IdentifiableValue iv)
 		{
 			this.key = key;
-			this.iv = iv;
+			this.identifiableValue = iv;
 		}
 
 		/** */
 		public Key getKey() { return this.key; }
 
 		/** @return true if we can cache this bucket; false if the key isn't cacheable or the memcache was down when we created the bucket */
-		public boolean isCacheable() { return this.iv != null; }
+		public boolean isCacheable() { return this.identifiableValue != null; }
 
 		/** @return true if this is a negative cache result */
-		public boolean isNegative() { return this.isCacheable() && NEGATIVE.equals(iv.getValue()); }
+		public boolean isNegative() { return this.isCacheable() && NEGATIVE.equals(identifiableValue.getValue()); }
 
 		/**
 		 * "Empty" means we don't know the value - it could be null, it could be uncacheable, or we could have some
@@ -101,13 +95,13 @@ public class EntityMemcache
 		 */
 		public boolean isEmpty()
 		{
-			return !this.isCacheable() || (!this.isNegative() && !(iv.getValue() instanceof Entity));
+			return !this.isCacheable() || (!this.isNegative() && !(identifiableValue.getValue() instanceof Entity));
 		}
 
 		/** Get the entity stored at this bucket, possibly the one that was set */
 		public Entity getEntity() {
-			if (iv != null && iv.getValue() instanceof Entity)
-				return (Entity)iv.getValue();
+			if (identifiableValue != null && identifiableValue.getValue() instanceof Entity)
+				return (Entity)identifiableValue.getValue();
 			else
 				return null;
 		}
@@ -144,9 +138,9 @@ public class EntityMemcache
 	/**
 	 * Creates a memcache which caches everything without expiry and doesn't record statistics.
 	 */
-	public EntityMemcache(String namespace)
+	public EntityMemcache(MemcacheService memcache, String namespace)
 	{
-		this(namespace, new CacheControl() {
+		this(memcache, namespace, new CacheControl() {
 			@Override
 			public Integer getExpirySeconds(Key key) { return 0; }
 		});
@@ -155,50 +149,27 @@ public class EntityMemcache
 	/**
 	 * Creates a memcache which doesn't record stats
 	 */
-	public EntityMemcache(String namespace, CacheControl cacheControl)
+	public EntityMemcache(final MemcacheService memcache, String namespace, CacheControl cacheControl)
 	{
-		this(namespace, cacheControl, new MemcacheStats() {
+		this(memcache, namespace, cacheControl, new MemcacheStats() {
 			@Override public void recordHit(Key key) { }
 			@Override public void recordMiss(Key key) { }
 		});
 	}
 
-	/**
-	 */
-	public EntityMemcache(String namespace, CacheControl cacheControl, MemcacheStats stats)
-	{
-		this(namespace, cacheControl, stats, ServiceFactoryFactory.getFactory(IMemcacheServiceFactory.class));
-	}
 
 	public EntityMemcache(
+			MemcacheService memcacheService,
 			String namespace,
 			CacheControl cacheControl,
-			MemcacheStats stats,
-			IMemcacheServiceFactory memcacheServiceFactory)
-	{
-		this(cacheControl, stats, memcacheServiceFactory.getMemcacheService(namespace));
-	}
-
-	public EntityMemcache(
-			CacheControl cacheControl,
-			MemcacheStats stats,
-			MemcacheService memcacheService)
+			MemcacheStats stats)
 	{
 		this.memcache = new KeyMemcacheService(memcacheService);
-		this.memcache.setErrorHandler(ErrorHandlers.getConsistentLogAndContinue(Level.SEVERE));
 		this.memcacheWithRetry = new KeyMemcacheService(MemcacheServiceRetryProxy.createProxy(memcacheService));
 		this.stats = stats;
 		this.cacheControl = cacheControl;
 	}
 
-	/**
-	 * Sets the error handler for the non-retry memcache object.
-	 */
-	@SuppressWarnings("deprecation")
-	public void setErrorHandler(com.google.appengine.api.memcache.ErrorHandler handler) {
-		this.memcache.setErrorHandler(handler);
-	}
-	
 	/**
 	 * <p>Gets the Buckets for the specified keys.  A bucket is built around an IdentifiableValue so you can
 	 * putAll() them without the risk of overwriting other threads' changes.  Buckets also hide the
@@ -228,40 +199,21 @@ public class EntityMemcache
 				potentials.add(key);
 		}
 
-		Map<Key, IdentifiableValue> ivs;
+		Map<Key, IdentifiableValue> casValues;
 		try {
-			ivs = this.memcache.getIdentifiables(potentials);
+			casValues = this.memcache.getIdentifiables(potentials);
 		} catch (Exception ex) {
 			// This should really only be a problem if the serialization format for an Entity changes,
 			// or someone put a badly-serializing object in the cache underneath us.
 			log.log(Level.WARNING, "Error obtaining cache for " + potentials, ex);
-			ivs = new HashMap<>();
-		}
-
-		// Figure out cold cache values
-		Map<Key, Object> cold = new HashMap<>();
-		for (Key key: potentials)
-			if (ivs.get(key) == null)
-				cold.put(key, null);
-
-		if (!cold.isEmpty())
-		{
-			// The cache is cold for those values, so start them out with nulls that we can make an IV for
-			this.memcache.putAll(cold);
-
-			try {
-				Map<Key, IdentifiableValue> ivs2 = this.memcache.getIdentifiables(cold.keySet());
-				ivs.putAll(ivs2);
-			} catch (Exception ex) {
-				// At this point we should just not worry about it, the ivs will be null and uncacheable
-			}
+			casValues = new HashMap<>();
 		}
 
 		// Now create the remaining buckets
 		for (Key key: keys)
 		{
 			// iv might still be null, which is ok - that means uncacheable
-			IdentifiableValue iv = ivs.get(key);
+			IdentifiableValue iv = casValues.get(key);
 			Bucket buck = (iv == null) ? new Bucket(key) : new Bucket(key, iv);
 			result.put(key, buck);
 
@@ -357,7 +309,7 @@ public class EntityMemcache
 	 */
 	private Set<Key> cachePutIfUntouched(Iterable<Bucket> buckets)
 	{
-		final Map<Key, CasValues> payload = new HashMap<>();
+		final Map<Key, CasPut> payload = new HashMap<>();
 		final Set<Key> successes = new HashSet<>();
 
 		for (Bucket buck: buckets)
@@ -373,9 +325,7 @@ public class EntityMemcache
 				continue;
 			}
 
-			Expiration expiration = expirySeconds == 0 ? null : Expiration.byDeltaSeconds(expirySeconds);
-
-			payload.put(buck.getKey(), new CasValues(buck.iv, buck.getNextToStore(), expiration));
+			payload.put(buck.getKey(), new CasPut(buck.identifiableValue, buck.getNextToStore(), expirySeconds));
 		}
 
 		successes.addAll(this.memcache.putIfUntouched(payload));

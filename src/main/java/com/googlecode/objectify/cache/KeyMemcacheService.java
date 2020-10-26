@@ -2,13 +2,11 @@ package com.googlecode.objectify.cache;
 
 import com.google.appengine.api.datastore.Key;
 import com.google.appengine.api.datastore.KeyFactory;
-import com.google.appengine.api.memcache.MemcacheService;
-import com.google.appengine.api.memcache.MemcacheService.CasValues;
-import com.google.appengine.api.memcache.MemcacheService.IdentifiableValue;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.googlecode.objectify.cache.MemcacheService.CasPut;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -25,15 +23,15 @@ import java.util.Set;
 public class KeyMemcacheService
 {
 	/** */
+	private final MemcacheService service;
+	
+	/** */
 	private static final Function<Key, String> STRINGIFY = new Function<Key, String>() {
 		@Override
 		public String apply(Key input) {
 			return KeyFactory.keyToString(input);
 		}
 	};
-
-	/** */
-	MemcacheService service;
 
 	/** */
 	public KeyMemcacheService(MemcacheService service) {
@@ -91,7 +89,7 @@ public class KeyMemcacheService
 		service.putAll(stringify(map));
 	}
 
-	public Set<Key> putIfUntouched(Map<Key, CasValues> map) {
+	public Set<Key> putIfUntouched(Map<Key, CasPut> map) {
 		if (map.isEmpty())
 			return Collections.emptySet();
 		
@@ -106,8 +104,4 @@ public class KeyMemcacheService
 		service.deleteAll(stringify(keys));
 	}
 
-	@SuppressWarnings("deprecation")
-	public void setErrorHandler(com.google.appengine.api.memcache.ErrorHandler handler) {
-		service.setErrorHandler(handler);
-	}
 }

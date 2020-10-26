@@ -6,6 +6,7 @@ import com.google.appengine.api.datastore.DatastoreServiceConfig;
 import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.googlecode.objectify.cache.CachingAsyncDatastoreService;
 import com.googlecode.objectify.cache.EntityMemcache;
+import com.googlecode.objectify.cache.MemcacheService;
 import com.googlecode.objectify.impl.CacheControlImpl;
 import com.googlecode.objectify.impl.EntityMemcacheStats;
 import com.googlecode.objectify.impl.EntityMetadata;
@@ -59,10 +60,17 @@ public class ObjectifyFactory implements Forge
 	 * Manages caching of entities at a low level. Lazily instantiated on the first register() of a cacheable entity.
 	 */
 	protected EntityMemcache entityMemcache;
+	
+	protected MemcacheService memcache;
+	
+	public ObjectifyFactory() {
+		entityMemcache = null; // no memcache
+		memcache = null;
+	}
 
-	/** Override this if you need special behavior from your EntityMemcache */
-	protected EntityMemcache createEntityMemcache() {
-		return new EntityMemcache(MEMCACHE_NAMESPACE, new CacheControlImpl(this), this.memcacheStats);
+	public ObjectifyFactory(MemcacheService memcacheService) {
+		this.memcache = memcacheService;
+		entityMemcache = memcacheService == null ? null : new EntityMemcache(memcacheService, MEMCACHE_NAMESPACE, new CacheControlImpl(this), this.memcacheStats);
 	}
 
 	/**
@@ -175,23 +183,17 @@ public class ObjectifyFactory implements Forge
 	 */
 	public <T> void register(Class<T> clazz) {
 		this.registrar.register(clazz);
-
-		if (this.entityMemcache == null && this.registrar.isCacheEnabled())
-			this.entityMemcache = createEntityMemcache();
+	}
+	
+	/** */
+	public MemcacheService memcache() {
+		return this.memcache;
 	}
 
 	/**
 	 * Get the object that tracks memcache stats.
 	 */
 	public EntityMemcacheStats getMemcacheStats() { return this.memcacheStats; }
-
-	/**
-	 * Sets the error handler for the main memcache object.
-	 */
-	@SuppressWarnings("deprecation")
-	public void setMemcacheErrorHandler(com.google.appengine.api.memcache.ErrorHandler handler) {
-		this.entityMemcache.setErrorHandler(handler);
-	}
 
 	//
 	// Stuff which should only be necessary internally, but might be useful to others.

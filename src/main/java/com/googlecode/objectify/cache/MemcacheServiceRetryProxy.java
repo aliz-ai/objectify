@@ -1,8 +1,5 @@
 package com.googlecode.objectify.cache;
 
-import com.google.appengine.api.memcache.ErrorHandlers;
-import com.google.appengine.api.memcache.MemcacheService;
-
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -36,8 +33,6 @@ public class MemcacheServiceRetryProxy implements InvocationHandler
 	 */
 	public static MemcacheService createProxy(MemcacheService raw, int retryCount)
 	{
-		raw.setErrorHandler(ErrorHandlers.getStrict());
-		
 		return (MemcacheService)java.lang.reflect.Proxy.newProxyInstance(
 			raw.getClass().getClassLoader(),
 			raw.getClass().getInterfaces(),
