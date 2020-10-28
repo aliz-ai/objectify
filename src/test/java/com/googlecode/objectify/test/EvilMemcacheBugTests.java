@@ -5,6 +5,10 @@
 
 package com.googlecode.objectify.test;
 
+import static com.googlecode.objectify.test.util.TestObjectifyService.fact;
+
+import org.testng.annotations.Test;
+
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.google.appengine.api.datastore.Entity;
@@ -17,17 +21,16 @@ import com.googlecode.objectify.Key;
 import com.googlecode.objectify.annotation.Cache;
 import com.googlecode.objectify.annotation.Id;
 import com.googlecode.objectify.annotation.Parent;
-import com.googlecode.objectify.cache.CachingDatastoreServiceFactory;
+import com.googlecode.objectify.cache.CachingAsyncDatastoreService;
+import com.googlecode.objectify.cache.CachingDatastoreService;
+import com.googlecode.objectify.cache.EntityMemcache;
 import com.googlecode.objectify.test.util.TestBase;
 import com.googlecode.objectify.test.util.TestObjectifyService;
-import org.testng.annotations.Test;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-
-import static com.googlecode.objectify.test.util.TestObjectifyService.fact;
 
 /**
  * Tests of a bizarre bug in Google's memcache serialization of Key objects.
@@ -114,7 +117,8 @@ public class EvilMemcacheBugTests extends TestBase
 		fact().register(SimpleEntity.class);
 
 		DatastoreService ds = TestObjectifyService.ds();
-		DatastoreService cacheds = CachingDatastoreServiceFactory.getDatastoreService();
+		final EntityMemcache mc = new EntityMemcache(fact().memcache(), "somenamespace");
+		CachingDatastoreService cacheds = new CachingDatastoreService(DatastoreServiceFactory.getDatastoreService(), new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc));
 
 		// This is the weirdest thing.  If you change the *name* of one of these two keys, the test passes.
 		// If the keys have the same *name*, the test fails because ent3 has the "original" property.  WTF??
