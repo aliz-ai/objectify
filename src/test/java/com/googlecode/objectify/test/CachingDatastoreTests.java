@@ -97,75 +97,71 @@ public class CachingDatastoreTests extends TestBase
 		assert cached.get().values().iterator().next().getProperty("foo").equals("bar");
 	}
 	
-	@Test
-	public void testEmptiedOnConcurrentWrite() throws Exception
-	{
-		EntityMemcache.CACHE_RACE_CONDITION_PREVENTION_ENABLED.set(() -> true);
-
-		EntityMemcache mc = Mockito.spy(new EntityMemcache(null));
-		CachingAsyncDatastoreService cds = new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc);
-
-		Future<List<Key>> fkey = cds.put(null, entityInList);
-		List<Key> putResult = fkey.get();
-		
-		Mockito.doAnswer(new Answer<Void>() {
-			@Override
-			public Void answer(InvocationOnMock invocation) throws Throwable {
-				// put a changed entity with the same key to memcache to simulate a memcache put by a concurrent request with an updated entity state
-				ServiceFactoryFactory.getFactory(IMemcacheServiceFactory.class).getMemcacheService(null).put(KeyFactory.keyToString(key), new Entity(key));
-				// in the 'actual' invocation then the 'putIfUntouched' will detect an update, so the 'putAll' call will empty the cache entry
-				return (Void) invocation.callRealMethod();
-			}
-		}).when(mc).putAll(Mockito.argThat(new ArgumentMatcher<Collection<Bucket>>() {
-
-			@Override
-			public boolean matches(Object argument) {
-				Collection<Bucket> buckets = (Collection<Bucket>) argument;
-				return buckets.stream().anyMatch(b -> b.getKey().equals(putResult.get(0)));
-			}
-		}));
-
-		Future<Map<Key, Entity>> fent = cds.get(null, putResult);
-		assert fent.get().values().iterator().next().getProperty("foo").equals("bar");
-		
-		
-		assert mc.getAll(putResult).values().iterator().next().isEmpty();
-		
-	}
-
-	@Test
-	public void testNegativeEntryConcurrentlyBecomingPositive() throws Exception
-	{
-		EntityMemcache.CACHE_RACE_CONDITION_PREVENTION_ENABLED.set(() -> true);
-		EntityMemcache mc = Mockito.spy(new EntityMemcache(null));
-		CachingAsyncDatastoreService cds = new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc);
-		
-		Mockito.doAnswer(new Answer<Void>() {
-			@Override
-			public Void answer(InvocationOnMock invocation) throws Throwable {
-				// put a changed entity with the same key to memcache to simulate a memcache put by a concurrent request with an updated entity state
-				ServiceFactoryFactory.getFactory(IMemcacheServiceFactory.class).getMemcacheService(null).put(KeyFactory.keyToString(key), new Entity(key));
-				// in the 'actual' invocation then the 'putIfUntouched' will detect an update, so the 'putAll' call will empty the cache entry
-				return (Void) invocation.callRealMethod();
-			}
-		}).when(mc).putAll(Mockito.argThat(new ArgumentMatcher<Collection<Bucket>>() {
+	private ArgumentMatcher<Collection<Bucket>> singleBucketWithKey(Key key) {
+		return new ArgumentMatcher<Collection<Bucket>>() {
 
 			@Override
 			public boolean matches(Object argument) {
 				Collection<Bucket> buckets = (Collection<Bucket>) argument;
 				return buckets.stream().anyMatch(b -> b.getKey().equals(key));
 			}
-		}));
+		};
+	}
+	
+	@Test
+	public void testEmptiedOnConcurrentWrite() throws Exception
+	{
+		EntityMemcache mc = Mockito.spy(new EntityMemcache(null));
+		CachingAsyncDatastoreService cds = new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc);
 
-		// The cache is emptied, because a colliding concurrent cache write was detected
+		Future<List<Key>> fkey = cds.put(null, entityInList);
+		List<Key> putResult = fkey.get();
+		
+		Mockito.doAnswer(new Answer<Void>() {
+			@Override
+			public Void answer(InvocationOnMock invocation) throws Throwable {
+				// put a changed entity with the same key to memcache to simulate a memcache put by a concurrent request with an updated entity state
+				ServiceFactoryFactory.getFactory(IMemcacheServiceFactory.class).getMemcacheService(null).put(KeyFactory.keyToString(key), new Entity(key));
+				// in the 'actual' invocation then the 'putIfUntouched' will detect an update, so the 'putAll' call will empty the cache entry
+				return (Void) invocation.callRealMethod();
+			}
+		}).when(mc).putAll(Mockito.argThat(singleBucketWithKey(putResult.get(0))));
+
+		// When we get the entity, the actual state is properly returned
+		Future<Map<Key, Entity>> fent = cds.get(null, putResult);
+		assert fent.get().values().iterator().next().getProperty("foo").equals("bar");
+		
+		// and the cache is emptied because the concurrent cache write simulated with the spy is detected
+		assert mc.getAll(putResult).values().iterator().next().isEmpty();
+	}
+
+	@Test
+	public void testNegativeEntryConcurrentlyBecomingPositive() throws Exception
+	{
+		EntityMemcache mc = Mockito.spy(new EntityMemcache(null));
+		CachingAsyncDatastoreService cds = new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc);
+		
+		Mockito.doAnswer(new Answer<Void>() {
+			@Override
+			public Void answer(InvocationOnMock invocation) throws Throwable {
+				// put a changed entity with the same key to memcache to simulate a memcache put by a concurrent request with an updated entity state
+				ServiceFactoryFactory.getFactory(IMemcacheServiceFactory.class).getMemcacheService(null).put(KeyFactory.keyToString(key), new Entity(key));
+				// in the 'actual' invocation then the 'putIfUntouched' will detect an update, so the 'putAll' call will empty the cache entry
+				return (Void) invocation.callRealMethod();
+			}
+		}).when(mc).putAll(Mockito.argThat(singleBucketWithKey(key)));
+
 		Future<Map<Key, Entity>> fent = cds.get(null, keyInSet);
 		assert fent.get().values().isEmpty();
+
+		// The cache is emptied, because a colliding concurrent cache write was detected
+		// (otherwise a 'NEGATIVE' entry would have been written to the cache
+		assert mc.getAll(keyInSet).values().iterator().next().isEmpty();
 	}
 
 	@Test
 	public void testNotEmptiedOnConcurrentIdenticalWrite() throws Exception
 	{
-		EntityMemcache.CACHE_RACE_CONDITION_PREVENTION_ENABLED.set(() -> true);
 		EntityMemcache mc = Mockito.spy(new EntityMemcache(null));
 		CachingAsyncDatastoreService cds = new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc);
 
@@ -180,33 +176,22 @@ public class CachingDatastoreTests extends TestBase
 				// in the 'actual' invocation then the 'putIfUntouched' will detect an update, so the 'putAll' call will empty the cache entry
 				return (Void) invocation.callRealMethod();
 			}
-		}).when(mc).putAll(Mockito.argThat(new ArgumentMatcher<Collection<Bucket>>() {
+		}).when(mc).putAll(Mockito.argThat(singleBucketWithKey(putResult.get(0))));
 
-			@Override
-			public boolean matches(Object argument) {
-				Collection<Bucket> buckets = (Collection<Bucket>) argument;
-				return buckets.stream().anyMatch(b -> b.getKey().equals(putResult.get(0)));
-			}
-		}));
-
+		// When we get the entity, the actual state is returned
 		Future<Map<Key, Entity>> fent = cds.get(null, putResult);
 		assert fent.get().values().iterator().next().getProperty("foo").equals("bar");
 		
-		
+		// but the cache is not empties, because the concurrently written cache entry is identical
 		assert !mc.getAll(putResult).values().iterator().next().isEmpty();
-		
 	}
 	
 	@Test
-	public void testEmptiedOnConcurrentIdenticalWrite_FeatureDisabled() throws Exception
+	public void testNotEmptiedOnConcurrentIdenticalNegativeWrite() throws Exception
 	{
-		EntityMemcache.CACHE_RACE_CONDITION_PREVENTION_ENABLED.set(() -> false);
 		EntityMemcache mc = Mockito.spy(new EntityMemcache(null));
 		CachingAsyncDatastoreService cds = new CachingAsyncDatastoreService(DatastoreServiceFactory.getAsyncDatastoreService(), mc);
 
-		Future<List<Key>> fkey = cds.put(null, entityInList);
-		List<Key> putResult = fkey.get();
-		
 		Mockito.doAnswer(new Answer<Void>() {
 			@Override
 			public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -215,20 +200,13 @@ public class CachingDatastoreTests extends TestBase
 				// in the 'actual' invocation then the 'putIfUntouched' will detect an update, so the 'putAll' call will empty the cache entry
 				return (Void) invocation.callRealMethod();
 			}
-		}).when(mc).putAll(Mockito.argThat(new ArgumentMatcher<Collection<Bucket>>() {
+		}).when(mc).putAll(Mockito.argThat(singleBucketWithKey(key)));
 
-			@Override
-			public boolean matches(Object argument) {
-				Collection<Bucket> buckets = (Collection<Bucket>) argument;
-				return buckets.stream().anyMatch(b -> b.getKey().equals(putResult.get(0)));
-			}
-		}));
+		Future<Map<Key, Entity>> fent = cds.get(null, keyInSet);
+		assert fent.get().values().isEmpty();
 
-		Future<Map<Key, Entity>> fent = cds.get(null, putResult);
-		assert fent.get().values().iterator().next().getProperty("foo").equals("bar");
-		
-		
-		assert mc.getAll(putResult).values().iterator().next().isEmpty();
-		
+		// The 'NEGATIVE' value is kept in the cache, because even though there was a concurrent cache write, the values are identical
+		assert mc.getAll(keyInSet).values().iterator().next().isNegative();
 	}
+
 }
