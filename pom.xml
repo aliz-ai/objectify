@@ -8,16 +8,16 @@
 
 	<groupId>com.googlecode.objectify</groupId>
 	<artifactId>objectify</artifactId>
-	<version>5.1.24.7</version>
+	<version>5.1.24.8</version>
 
 	<name>Objectify App Engine</name>
 	<description>The simplest convenient interface to the Google App Engine datastore</description>
 	<packaging>jar</packaging>
 	<url>https://github.com/objectify/objectify</url>
 	<scm>
-		<url>scm:git:https://github.com/objectify/objectify</url>
-		<developerConnection>scm:git:git@github.com:objectify/objectify</developerConnection>
-		<tag>5.1.24.7</tag>
+		<url>scm:git:https://github.com/aliz-ai/objectify</url>
+		<developerConnection>scm:git:git@github.com:aliz-ai/objectify</developerConnection>
+		<tag>5.1.24.8</tag>
 	</scm>
 	<licenses>
 		<license>
