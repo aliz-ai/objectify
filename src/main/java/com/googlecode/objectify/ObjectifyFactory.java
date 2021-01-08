@@ -7,6 +7,7 @@ import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.googlecode.objectify.cache.CachingAsyncDatastoreService;
 import com.googlecode.objectify.cache.EntityMemcache;
 import com.googlecode.objectify.cache.MemcacheService;
+import com.googlecode.objectify.cache.MemcacheStats;
 import com.googlecode.objectify.impl.CacheControlImpl;
 import com.googlecode.objectify.impl.EntityMemcacheStats;
 import com.googlecode.objectify.impl.EntityMetadata;
@@ -54,7 +55,7 @@ public class ObjectifyFactory implements Forge
 	protected Translators translators = new Translators(this);
 
 	/** Tracks stats */
-	protected EntityMemcacheStats memcacheStats = new EntityMemcacheStats();
+	protected MemcacheStats memcacheStats;
 
 	/**
 	 * Manages caching of entities at a low level. Lazily instantiated on the first register() of a cacheable entity.
@@ -69,7 +70,12 @@ public class ObjectifyFactory implements Forge
 	}
 
 	public ObjectifyFactory(MemcacheService memcacheService) {
+		this(memcacheService, new EntityMemcacheStats());
+	}
+
+	public ObjectifyFactory(MemcacheService memcacheService, MemcacheStats memcacheStats) {
 		this.memcache = memcacheService;
+		this.memcacheStats = memcacheStats;
 		entityMemcache = memcacheService == null ? null : new EntityMemcache(memcacheService, MEMCACHE_NAMESPACE, new CacheControlImpl(this), this.memcacheStats);
 	}
 
@@ -193,7 +199,7 @@ public class ObjectifyFactory implements Forge
 	/**
 	 * Get the object that tracks memcache stats.
 	 */
-	public EntityMemcacheStats getMemcacheStats() { return this.memcacheStats; }
+	public MemcacheStats getMemcacheStats() { return this.memcacheStats; }
 
 	//
 	// Stuff which should only be necessary internally, but might be useful to others.

@@ -32,7 +32,7 @@ public class MemcacheStatsServlet extends HttpServlet
 	 */
 	protected EntityMemcacheStats getMemcacheStats()
 	{
-		return ObjectifyService.factory().getMemcacheStats();
+		return (EntityMemcacheStats) ObjectifyService.factory().getMemcacheStats();
 	}
 	
 	/** */
