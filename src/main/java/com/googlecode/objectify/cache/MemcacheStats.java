@@ -10,8 +10,16 @@ import com.google.appengine.api.datastore.Key;
  */
 public interface MemcacheStats
 {
-	public void recordHit(Key key);
-	public void recordMiss(Key key);
+
+	public Batch batch();
+	
+	public interface Batch {
+
+		public void recordHit(Key key);
+
+		public void recordMiss(Key key);
+		
+	}
 }
 
 

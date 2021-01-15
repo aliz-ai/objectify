@@ -4,6 +4,7 @@ import com.google.appengine.api.datastore.Entity;
 import com.google.appengine.api.datastore.Key;
 import com.google.common.base.Objects;
 import com.googlecode.objectify.cache.MemcacheService.CasPut;
+import com.googlecode.objectify.cache.MemcacheStats.Batch;
 
 import lombok.EqualsAndHashCode;
 import lombok.extern.java.Log;
@@ -152,8 +153,13 @@ public class EntityMemcache
 	public EntityMemcache(final MemcacheService memcache, String namespace, CacheControl cacheControl)
 	{
 		this(memcache, namespace, cacheControl, new MemcacheStats() {
-			@Override public void recordHit(Key key) { }
-			@Override public void recordMiss(Key key) { }
+			@Override
+			public Batch batch() {
+				return new Batch() {
+					@Override public void recordHit(Key key) { }
+					@Override public void recordMiss(Key key) { }
+				};
+			}
 		});
 	}
 
@@ -210,6 +216,7 @@ public class EntityMemcache
 		}
 
 		// Now create the remaining buckets
+		Batch batch = this.stats.batch();
 		for (Key key: keys)
 		{
 			// iv might still be null, which is ok - that means uncacheable
@@ -218,9 +225,9 @@ public class EntityMemcache
 			result.put(key, buck);
 
 			if (buck.isEmpty())
-				this.stats.recordMiss(buck.getKey());
+				batch.recordMiss(buck.getKey());
 			else
-				this.stats.recordHit(buck.getKey());
+				batch.recordHit(buck.getKey());
 		}
 
 		return result;
