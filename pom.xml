@@ -8,7 +8,7 @@
 
 	<groupId>com.googlecode.objectify</groupId>
 	<artifactId>objectify</artifactId>
-	<version>5.1.24.10-SNAPSHOT</version>
+	<version>5.1.24.10</version>
 
 	<name>Objectify App Engine</name>
 	<description>The simplest convenient interface to the Google App Engine datastore</description>
@@ -17,7 +17,7 @@
 	<scm>
 		<url>scm:git:https://github.com/aliz-ai/objectify</url>
 		<developerConnection>scm:git:git@github.com:aliz-ai/objectify</developerConnection>
-		<tag>5.1.24.8</tag>
+		<tag>5.1.24.10</tag>
 	</scm>
 	<licenses>
 		<license>
