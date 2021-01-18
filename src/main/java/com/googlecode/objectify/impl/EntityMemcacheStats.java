@@ -42,21 +42,28 @@ public class EntityMemcacheStats implements MemcacheStats
 	 * @return the live map, but you can iterate through it just fine 
 	 */
 	public Map<String, Stat> getStats() { return this.stats; }
-
-	/** */
+	
 	@Override
-	public void recordHit(Key key)
-	{
-		this.getStat(key.getKind()).hits.incrementAndGet();
-	}
+	public Batch batch() {
+		return new Batch() {
+			
+			/** */
+			@Override
+			public void recordHit(Key key)
+			{
+				getStat(key.getKind()).hits.incrementAndGet();
+			}
 
-	/** */
-	@Override
-	public void recordMiss(Key key)
-	{
-		this.getStat(key.getKind()).misses.incrementAndGet();
-	}
+			/** */
+			@Override
+			public void recordMiss(Key key)
+			{
+				getStat(key.getKind()).misses.incrementAndGet();
+			}
 
+		};
+	}
+	
 	/**
 	 * We're just tracking statistics so we don't really need to worry about these stepping on each other;
 	 * if there's a hit or miss lost no big deal.
